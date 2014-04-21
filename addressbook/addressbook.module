@@ -1,0 +1,26 @@
+<?php
+
+/**
+ * Creates menu route
+ * 
+ * @return array
+ */
+function addressbook_menu() {
+  return array(
+    'addressbook/add' => array(
+      'title' => 'Add new contact',
+      'access callback' => TRUE,
+      'page callback' => 'addressbook_add_contact_page',
+    )
+  );
+}
+
+/**
+ * Page callback for menu route "addressbook/add".
+ * 
+ * @param string $arg
+ * @return string
+ */
+function addressbook_add_contact_page() {
+  return 'dima';
+}

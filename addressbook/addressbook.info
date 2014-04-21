@@ -1,0 +1,3 @@
+name = "Address Book"
+description = "Allows user to create address book"
+core = 7.x
