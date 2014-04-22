@@ -1,0 +1,59 @@
+<?php
+/**
+ * @file
+ * Install file of module.
+ */
+
+/**
+ * Implements hook_schema().
+ *
+ * @return array
+ */
+
+function addressbook_schema() {
+  return array(
+    'addressbook' => array(
+      'description' => t('This table is intended to store contacts data.'),
+      'fields' => array(
+        'contact_id' => array(
+          'description' => 'Primary key',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+        ),
+        'first_name' => array(
+          'description' => 'First name',
+          'type' => 'varchar',
+          'length' => 60,
+        ),
+        'last_name' => array(
+          'description' => 'Last name',
+          'type' => 'varchar',
+          'length' => 60,
+        ),
+        'email' => array(
+          'description' => 'E-mail',
+          'type' => 'varchar',
+          'length' => 254,
+        ),
+        'phone' => array(
+          'description' => 'Phone',
+          'type' => 'varchar',
+          'length' => 255,
+        ),
+        'birthday' => array(
+          'description' => 'Birthday',
+          'mysql_type' => 'DATE',
+        ),
+        'category' => array(
+          'description' => 'Category',
+          'type' => 'text',
+        ),
+        'notes' => array(
+          'description' => 'Notes',
+          'type' => 'text',
+        ),
+      ),
+      'primary key' => array('contact_id'),
+    ),
+  );
+}
