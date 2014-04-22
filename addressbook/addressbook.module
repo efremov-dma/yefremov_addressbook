@@ -5,14 +5,33 @@
  * 
  * @return array
  */
+
+
 function addressbook_menu() {
   return array(
-    'addressbook/add' => array(
-      'title' => 'Add new contact',
+    'addressbook' => array(
+      'title' => 'Address Book',
+      'type' => MENU_NORMAL_ITEM,
+      'page callback' => 'addressbook_list_page',
       'access callback' => TRUE,
+    ),
+    'addressbook/list' => array(
+      'title' => 'List',
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => 1,
+    ),
+    'addressbook/add' => array(
+      'title' => 'Add',
+      'type' => MENU_LOCAL_TASK,
       'page callback' => 'addressbook_add_contact_page',
-    )
+      'access callback' => TRUE,
+      'weight' => 2,
+    ),
   );
+}
+
+function addressbook_list_page() {
+  return 'List';
 }
 
 /**
@@ -21,6 +40,72 @@ function addressbook_menu() {
  * @param string $arg
  * @return string
  */
+
 function addressbook_add_contact_page() {
-  return 'dima';
+  return drupal_get_form('addressbook_add_contact_page_form');
+}
+
+function addressbook_add_contact_page_form($form, &$form_state) {
+  $form = array();
+
+  $form['photo'] = array(
+    '#type' => 'file',
+    '#title' => 'Photo:',
+    '#description' => t('Max allowed file size: 2Mb. You can upload images with following extensions: jpg, jpeg, png' ),
+  );
+
+  $form['first_name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('First name:'),
+  );
+
+  $form['last_name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Last name:'),
+  );
+
+  $form['email'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Email:'),
+  );
+
+  $form['phone'] = array(
+    '#type' => 'testfield',
+    '#title' => t('Phone:'),
+  );
+
+  $form['birthday'] = array(
+    '#type' => 'date',
+    '#title' => t('Birthday:'),
+    '#default_value' => array(
+      'year' => 1979,
+      'month' => 6,
+      'day' => 14,
+    ),
+  );
+
+  $form['category'] = array(
+    '#type' => 'select',
+    '#title' => t('Category:'),
+    '#options' => array(
+      0 => t('Category 1'),
+      1 => t('Category 2'),
+      2 => t('Category 3'),
+      3 => t('Category 4'),
+      4 => t('Category 5'),
+    ),
+    '#description' => t('Please, choose category of this contact'),
+  );
+
+  $form['notes'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Notes:'),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Create'),
+  );
+
+  return $form;
 }
