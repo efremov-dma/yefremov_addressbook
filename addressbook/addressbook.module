@@ -23,7 +23,7 @@ function addressbook_menu() {
     'addressbook/add' => array(
       'title' => 'Add',
       'type' => MENU_LOCAL_TASK,
-      'page callback' => 'addressbook_add_contact_page',
+      'page callback' => 'addressbook_add_page',
       'access callback' => TRUE,
       'weight' => 2,
     ),
@@ -41,11 +41,11 @@ function addressbook_list_page() {
  * @return string
  */
 
-function addressbook_add_contact_page() {
-  return drupal_get_form('addressbook_add_contact_page_form');
+function addressbook_add_page() {
+  return drupal_get_form('addressbook_add_page_form');
 }
 
-function addressbook_add_contact_page_form($form, &$form_state) {
+function addressbook_add_page_form($form, &$form_state) {
   $form = array();
 
   $form['photo'] = array(
@@ -70,7 +70,7 @@ function addressbook_add_contact_page_form($form, &$form_state) {
   );
 
   $form['phone'] = array(
-    '#type' => 'testfield',
+    '#type' => 'textfield',
     '#title' => t('Phone:'),
   );
 
@@ -108,4 +108,72 @@ function addressbook_add_contact_page_form($form, &$form_state) {
   );
 
   return $form;
+}
+
+
+function addressbook_add_page_form_validate($form, &$form_state) {
+  global $user;
+  
+  // dsm( $form_state );    
+  // dsm( $user->uid );
+
+  $file = file_save_upload( 'photo', array(
+      'file_validate_is_image' => array(),
+      'file_validate_extensions' => array('jpg jpeg png'),
+      'file_validate_size' => array(2*1024*1024),
+    )
+  );
+
+  if ($file) {
+    $destination = 'public://addressbook/' . $user->uid . '/';
+    $directory_exists = file_prepare_directory($destination, FILE_CREATE_DIRECTORY);
+    if ($directory_exists && $file = file_move($file, $destination . $file->filename, FILE_EXISTS_RENAME)) {
+      $form_state['storage']['photo'] = $file; /* File object will be passed to the submit function */
+    }
+    else {
+      form_set_error('photo', t('Failed to write the uploaded file to the site\'s file folder.'));
+    }
+  }
+  elseif (FALSE) {
+    form_set_error('photo', t('Your photo did no pass validation.'));
+  }
+
+  if ( !$form_state['values']['first_name'] && !$form_state['values']['last_name'] ) {
+    form_set_error('first_name', t('Please enter at least first name or last name of your contact.'));
+    form_set_error('last_name', '');
+  }
+}
+
+function addressbook_add_page_form_submit($form, &$form_state) {
+  global $user;
+  // dsm( $form_state );
+  /* Display success message */
+  drupal_set_message( t('Your contact have been saved successfully.' ) );
+  /* Make birthday value match MySql date format Y-m-d */
+  $birthday = $form_state['values']['birthday'];
+  $birthday = $birthday['year'] . '-' . $birthday['month'] . '-' . $birthday['day'];
+
+  /* Prepare file object so it can be saved to database */
+  if ( isset($form_state['storage']['photo']) ) {
+    $photo = serialize((array)$form_state['storage']['photo']);
+  } else {
+    $photo = NULL;
+  }
+
+  // $photo = (object) unserialize( $photo );
+  /* Save data to database */
+  db_insert('addressbook')
+    ->fields(array(
+        'first_name' => $form_state['values']['first_name'],
+        'last_name' => $form_state['values']['last_name'],
+        'email' => $form_state['values']['email'],
+        'phone' => $form_state['values']['phone'],
+        'birthday' => $birthday,
+        'category' => $form_state['values']['category'],
+        'notes' => $form_state['values']['notes'],
+        'photo' => $photo,
+        'user_id' => $user->uid,
+      ))
+    ->execute();
+
 }

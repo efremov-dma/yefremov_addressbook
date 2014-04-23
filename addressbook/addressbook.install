@@ -52,7 +52,19 @@ function addressbook_schema() {
           'description' => 'Notes',
           'type' => 'text',
         ),
+        'photo' => array(
+          'description' => 'Path to the image file',
+          'type' => 'text',
+          'size' => 'big',
+        ),
+        'user_id' => array(
+          'description' => 'ID of the user who created this contact.',
+          'type' => 'int',
+          'length' => 10,
+          'not null' => TRUE,
+        ),
       ),
+
       'primary key' => array('contact_id'),
     ),
   );
