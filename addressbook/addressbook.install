@@ -53,9 +53,9 @@ function addressbook_schema() {
           'type' => 'text',
         ),
         'photo' => array(
-          'description' => 'Path to the image file',
-          'type' => 'text',
-          'size' => 'big',
+          'description' => 'File Id',
+          'type' => 'int',
+          'length' => 10,
         ),
         'user_id' => array(
           'description' => 'ID of the user who created this contact.',
@@ -68,4 +68,49 @@ function addressbook_schema() {
       'primary key' => array('contact_id'),
     ),
   );
+}
+
+
+function addressbook_install() {
+  /* Create custom image style for contact preview */
+  $style = image_style_save(array('name' => 'contact_preview'));
+  $effect = array(
+    'name' => 'image_scale',
+    'data' => array(
+      'width' => 75,
+      'height' => 75,
+      'upscale' => TRUE,
+    ),
+    'isid' => $style['isid'],
+  );
+  image_effect_save($effect);
+
+  /* Create custom vocabulary for Categories */
+  $vocab = (object) array(
+    'name' => 'Address Book Categories',
+    'description' => 'Categories for your contact.',
+    'machine_name' => 'addresbook_categories',
+  );
+  taxonomy_vocabulary_save($vocab);
+  /* Add terms to the custom vocabulary */
+  $vocab = taxonomy_vocabulary_machine_name_load('addresbook_categories');
+  for ($i = 1; $i <= 5; $i++) {
+    $term = (object) array(
+       'name' => 'Category ' . $i,
+       'description' => 'This is Category ' . $i,
+       'vid' => $vocab->vid,
+    );
+    taxonomy_term_save($term);
+  }
+
+}
+
+function addressbook_uninstall() {
+  /* Remove custom image styles */
+  image_style_delete(image_style_load('contact_preview'));
+
+  /* Remove custom vocabularies */
+  $vocab = taxonomy_vocabulary_machine_name_load('addresbook_categories');
+  taxonomy_vocabulary_delete($vocab->vid);
+
 }

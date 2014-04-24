@@ -6,33 +6,173 @@
  * @return array
  */
 
+function addressbook_theme() {
+  return array(
+    'upload_thumb' => array(
+      'render element' => 'element',
+      'path' => drupal_get_path('module', 'addressbook') . '/includes',
+      'file' => 'addressbook.theme.inc',
+    ),
+  );
+}
+
 
 function addressbook_menu() {
   return array(
-    'addressbook' => array(
+    'address-book' => array(
       'title' => 'Address Book',
       'type' => MENU_NORMAL_ITEM,
       'page callback' => 'addressbook_list_page',
       'access callback' => TRUE,
     ),
-    'addressbook/list' => array(
+    'address-book/list' => array(
       'title' => 'List',
       'type' => MENU_DEFAULT_LOCAL_TASK,
       'weight' => 1,
     ),
-    'addressbook/add' => array(
+    'address-book/add' => array(
       'title' => 'Add',
       'type' => MENU_LOCAL_TASK,
       'page callback' => 'addressbook_add_page',
       'access callback' => TRUE,
       'weight' => 2,
     ),
+     'address-book/edit/%' => array(
+      'title' => 'Edit Contact',
+      // 'type' => MENU_LOCAL_TASK,
+      'page callback' => 'addressbook_add_page',
+      'page arguments' => array(2),
+      'access callback' => TRUE,
+    ),
   );
 }
 
 function addressbook_list_page() {
-  return 'List';
+  return drupal_get_form('addressbook_list_page_form');
 }
+
+
+function addressbook_list_page_form($form, &$form_state) {
+  global $user;
+
+  $form = array();
+
+  $terms = array();
+  $vocab = taxonomy_vocabulary_machine_name_load('addresbook_categories');
+  $tree  = taxonomy_get_tree($vocab->vid);
+  foreach ($tree as $term) {
+    $terms[$term->tid] = $term->name;
+  }
+
+  $form['category'] = array(
+    '#type' => 'select',
+    '#title' => t('Category:'),
+    '#options' => $terms,
+    '#ajax' => array(
+      // #ajax has two required keys: callback and wrapper.
+      // 'callback' is a function that will be called when this element changes.
+      'callback' => 'ajax_example_simplest_callback',
+      // 'wrapper' is the HTML id of the page element that will be replaced.
+      'wrapper' => 'replace_textfield_div',
+      // There are also several optional keys - see ajax_example_autocheckboxes
+      // below for details on 'method', 'effect' and 'speed' and
+      // ajax_example_dependent_dropdown for 'event'.
+    ),
+  );
+
+  $header = array(
+    // array('data' => t('Photo'),     'field' => 'photo'),
+    // array('data' => t('Full Name'), 'field' => 'full_name'),
+    // array('data' => t('Category'),  'field' => 'category', 'sort' => 'ASC'),
+    // array('data' => t('Email'),     'field' => 'email'),
+    // array('data' => t('Phone'),     'field' => 'phone'),
+    // array('data' => t('Birthday'),  'field' => 'birthday'),
+    // array('data' => t(''),          'field' => 'action'),
+    'photo' => t('Photo'),
+    'full_name' => t('Full Name'),
+    // 'category' => t('Category'),
+    'category' => array('data' => t('Category'),  'field' => 'category'),
+    'email' => t('Email'),
+    'phone' => t('Phone'),
+    'birthday' => t('Birthday'),
+    'action' => t('Edit | Delete'),
+  );
+
+  $options = array();
+
+  $result = db_select('addressbook', 'a')
+  ->fields('a', array(
+    'contact_id',
+    'first_name',
+    'last_name',
+    'email',
+    'phone',
+    'birthday',
+    'category',
+    'notes',
+    'photo',
+  ))
+  ->condition('user_id', $user->uid, '=')
+  ->extend('TableSort')
+  ->orderByHeader($header)
+  ->extend('PagerDefault')
+  ->limit(10)
+  ->execute()
+  ->fetchAll();
+
+  if ($result) {
+    foreach ($result as $row) {
+      if ($row->photo) {
+        $photo = file_load($row->photo);
+        $photo = '<img src="' . image_style_url('contact_preview', $photo->uri) . '">';
+      }
+      else {
+        $photo = t('No photo');
+      }
+
+      $edit = '<a href="?q=address-book/edit/' . $row->contact_id . '">edit</a>';
+
+      $options[$row->contact_id] = array(
+        'photo' => $photo,
+        'full_name' => $row->first_name . ' ' . $row->last_name,
+        'category' => $row->category,
+        'email' => $row->email,
+        'phone' => $row->phone,
+        'birthday' => $row->birthday,
+        'action' => $edit . ' | delete',
+      );
+    } /* close foreach */
+  } /* clos if result */
+
+
+  $form['table'] = array(
+    '#type' => 'tableselect',
+    '#header' => $header,
+    '#options' => $options,
+    '#empty' => t('No contacts found'),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Delete selected'),
+  );
+
+  $form['pager'] = array(
+    '#markup' => theme('pager')
+  );
+
+  return $form;
+
+}
+
+function addressbook_list_page_form_submit($form, &$form_state) {
+  dsm( $form_state );
+}
+
+
+
+
+
 
 /**
  * Page callback for menu route "addressbook/add".
@@ -41,37 +181,89 @@ function addressbook_list_page() {
  * @return string
  */
 
-function addressbook_add_page() {
-  return drupal_get_form('addressbook_add_page_form');
+function addressbook_add_page($arg = "") {
+  return drupal_get_form('addressbook_add_page_form', $arg);
 }
 
-function addressbook_add_page_form($form, &$form_state) {
+function addressbook_add_page_form($form, &$form_state, $arg = "") {
+  global $user;  
+  $upload_location = 'public://addressbook/' . $user->uid . '/';
+  // $upload_location = 'public://addressbook/_tmp/';
+  file_prepare_directory($upload_location, FILE_CREATE_DIRECTORY);
+
+  $defaults = array(
+    'first_name' => '',
+    'last_name' => '',
+    'email' => '',
+    'phone' => '',
+    'birthday' => '',
+    'category' => '',
+    'notes' => '',
+    'photo' => '',
+  );
+
+  if ($arg) {
+      $result = db_select('addressbook', 'a')
+    ->fields('a', array(
+      'first_name',
+      'last_name',
+      'email',
+      'phone',
+      'birthday',
+      'category',
+      'notes',
+      'photo',
+    ))
+    ->condition('contact_id', $arg, '=')
+    ->range(0, 1)
+    ->execute()
+    ->fetchAll();
+
+    if ($result) {
+      foreach( $result[0] as $key => $value ) {
+        $defaults[$key] = $value;
+      }
+    }
+
+  }
+
   $form = array();
 
   $form['photo'] = array(
-    '#type' => 'file',
-    '#title' => 'Photo:',
-    '#description' => t('Max allowed file size: 2Mb. You can upload images with following extensions: jpg, jpeg, png' ),
+    '#type' => 'managed_file',
+    '#title' => t('Photo:'),
+    '#description' => t('Max allowed file size: 2Mb. You can upload images with following extensions: jpg, jpeg, png'),
+    '#upload_location' => $upload_location,
+    '#theme' => 'upload_thumb',
+    '#upload_validators' => array(
+      'file_validate_extensions' => array('jpg jpeg png'),
+      'file_validate_size' => array(2*1024*1024),
+    ),
+    '#default_value' => $defaults['photo'],
   );
 
   $form['first_name'] = array(
     '#type' => 'textfield',
     '#title' => t('First name:'),
+    '#default_value' => t( $defaults['first_name'] ),
   );
 
   $form['last_name'] = array(
     '#type' => 'textfield',
     '#title' => t('Last name:'),
+    '#default_value' => t( $defaults['last_name'] ),
   );
 
   $form['email'] = array(
     '#type' => 'textfield',
     '#title' => t('Email:'),
+    '#default_value' => t( $defaults['email'] ),
   );
 
   $form['phone'] = array(
     '#type' => 'textfield',
     '#title' => t('Phone:'),
+    '#default_value' => t( $defaults['phone'] ),
   );
 
   $form['birthday'] = array(
@@ -84,96 +276,102 @@ function addressbook_add_page_form($form, &$form_state) {
     ),
   );
 
+  $terms = array();
+  $vocab = taxonomy_vocabulary_machine_name_load('addresbook_categories');
+  $tree  = taxonomy_get_tree($vocab->vid);
+  foreach ($tree as $term) {
+    $terms[$term->tid] = $term->name;
+  }
+
   $form['category'] = array(
     '#type' => 'select',
     '#title' => t('Category:'),
-    '#options' => array(
-      0 => t('Category 1'),
-      1 => t('Category 2'),
-      2 => t('Category 3'),
-      3 => t('Category 4'),
-      4 => t('Category 5'),
-    ),
+    '#options' => $terms,
     '#description' => t('Please, choose category of this contact'),
+    '#default_value' => array( $defaults['category'] ),
   );
 
   $form['notes'] = array(
     '#type' => 'textarea',
     '#title' => t('Notes:'),
+    '#default_value' => t( $defaults['notes'] ),
   );
 
   $form['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('Create'),
+    '#value' => $arg ? t('Update') : t('Create'),
   );
-
   return $form;
 }
+
 
 
 function addressbook_add_page_form_validate($form, &$form_state) {
   global $user;
   
-  // dsm( $form_state );    
-  // dsm( $user->uid );
-
-  $file = file_save_upload( 'photo', array(
-      'file_validate_is_image' => array(),
-      'file_validate_extensions' => array('jpg jpeg png'),
-      'file_validate_size' => array(2*1024*1024),
-    )
-  );
-
-  if ($file) {
-    $destination = 'public://addressbook/' . $user->uid . '/';
-    $directory_exists = file_prepare_directory($destination, FILE_CREATE_DIRECTORY);
-    if ($directory_exists && $file = file_move($file, $destination . $file->filename, FILE_EXISTS_RENAME)) {
-      $form_state['storage']['photo'] = $file; /* File object will be passed to the submit function */
-    }
-    else {
-      form_set_error('photo', t('Failed to write the uploaded file to the site\'s file folder.'));
-    }
-  }
-  elseif (FALSE) {
-    form_set_error('photo', t('Your photo did no pass validation.'));
-  }
 
   if ( !$form_state['values']['first_name'] && !$form_state['values']['last_name'] ) {
     form_set_error('first_name', t('Please enter at least first name or last name of your contact.'));
     form_set_error('last_name', '');
   }
+
 }
 
+
+
 function addressbook_add_page_form_submit($form, &$form_state) {
+
+  dsm( $form_state );
+
+
   global $user;
-  // dsm( $form_state );
-  /* Display success message */
-  drupal_set_message( t('Your contact have been saved successfully.' ) );
+  global $account;
+  /* Change file status and move it to a new folder */
+  if ( $form_state['values']['photo'] ) {
+    $fid = $form_state['values']['photo'];
+    $file = file_load($fid);
+    $file->status = FILE_STATUS_PERMANENT;
+    $file = file_save($file);
+    /* This line solves the "File used in the Photo field may not be referenced" issue. */
+    file_usage_add($file, 'addressbook', 'user', 1); 
+    $form_state['values']['photo'] = $file->fid;
+  }
+
   /* Make birthday value match MySql date format Y-m-d */
   $birthday = $form_state['values']['birthday'];
   $birthday = $birthday['year'] . '-' . $birthday['month'] . '-' . $birthday['day'];
 
-  /* Prepare file object so it can be saved to database */
-  if ( isset($form_state['storage']['photo']) ) {
-    $photo = serialize((array)$form_state['storage']['photo']);
-  } else {
-    $photo = NULL;
-  }
-
-  // $photo = (object) unserialize( $photo );
   /* Save data to database */
-  db_insert('addressbook')
-    ->fields(array(
-        'first_name' => $form_state['values']['first_name'],
-        'last_name' => $form_state['values']['last_name'],
-        'email' => $form_state['values']['email'],
-        'phone' => $form_state['values']['phone'],
-        'birthday' => $birthday,
-        'category' => $form_state['values']['category'],
-        'notes' => $form_state['values']['notes'],
-        'photo' => $photo,
-        'user_id' => $user->uid,
-      ))
-    ->execute();
-
+  if ($form_state['build_info']['args'][0]) {
+    $arg = $form_state['build_info']['args'][0];
+    db_update('addressbook')
+      ->fields(array(
+          'first_name' => $form_state['values']['first_name'],
+          'last_name' => $form_state['values']['last_name'],
+          'email' => $form_state['values']['email'],
+          'phone' => $form_state['values']['phone'],
+          'birthday' => $birthday,
+          'category' => $form_state['values']['category'],
+          'notes' => $form_state['values']['notes'],
+          'photo' => $form_state['values']['photo'],
+        ))
+      ->condition('contact_id', $arg, '=')
+      ->execute();
+  } else {
+    db_insert('addressbook')
+      ->fields(array(
+          'first_name' => $form_state['values']['first_name'],
+          'last_name' => $form_state['values']['last_name'],
+          'email' => $form_state['values']['email'],
+          'phone' => $form_state['values']['phone'],
+          'birthday' => $birthday,
+          'category' => $form_state['values']['category'],
+          'notes' => $form_state['values']['notes'],
+          'photo' => $form_state['values']['photo'],
+          'user_id' => $user->uid,
+        ))
+      ->execute();
+  }
+  /* Display success message */
+  drupal_set_message( t('Your contact have been saved successfully.' ) );
 }
