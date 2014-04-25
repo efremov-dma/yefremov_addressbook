@@ -1,11 +1,9 @@
 <?php
-
 /**
- * Creates menu route
+ * Implements hook_theme()
  * 
  * @return array
  */
-
 function addressbook_theme() {
   return array(
     'upload_thumb' => array(
@@ -13,93 +11,188 @@ function addressbook_theme() {
       'path' => drupal_get_path('module', 'addressbook') . '/includes',
       'file' => 'addressbook.theme.inc',
     ),
+    'single_contact' => array(
+      'variables' => array(
+        'first_name' => '',
+        'last_name' => '',
+        'email' => '',
+        'phone' => '',
+        'birthday' => '',
+        'category' => '',
+        'notes' => '',
+        'photo' => '',
+        'contact_exist' => false,
+      ),
+      'path' => drupal_get_path('module', 'addressbook') . '/templates',
+      'template' => 'single-contact',
+    ),
   );
 }
 
-
+/** 
+ * Creates menu routes.
+ *
+ * @return 
+ */
 function addressbook_menu() {
   return array(
     'address-book' => array(
       'title' => 'Address Book',
-      'type' => MENU_NORMAL_ITEM,
       'page callback' => 'addressbook_list_page',
       'access callback' => TRUE,
+      'type' => MENU_NORMAL_ITEM,
+    ),
+    'address-book/%' => array(
+      'title' => 'Single Contact',
+      'title callback' => 'addressbook_single_contact_title',
+      'title arguments' => array(1),
+      'page callback' => 'addressbook_single_contact',
+      'page arguments' => array(1),
+      'access callback' => TRUE,
+      'type' => MENU_CALLBACK,
     ),
     'address-book/list' => array(
       'title' => 'List',
-      'type' => MENU_DEFAULT_LOCAL_TASK,
       'weight' => 1,
+      'type' => MENU_DEFAULT_LOCAL_TASK,
     ),
     'address-book/add' => array(
       'title' => 'Add',
-      'type' => MENU_LOCAL_TASK,
       'page callback' => 'addressbook_add_page',
       'access callback' => TRUE,
       'weight' => 2,
+      'type' => MENU_LOCAL_TASK,
     ),
-     'address-book/edit/%' => array(
+    'address-book/edit/%' => array(
       'title' => 'Edit Contact',
-      // 'type' => MENU_LOCAL_TASK,
+      'title callback' => 'addressbook_title',
+      'title arguments' => array(1, 2),
       'page callback' => 'addressbook_add_page',
       'page arguments' => array(2),
       'access callback' => TRUE,
+      'type' => MENU_CALLBACK,
+    ),
+    'address-book/delete/%' => array(
+      'title' => 'Delete contact',
+      'title callback' => 'addressbook_title',
+      'title arguments' => array(1, 2),
+      'page callback' => 'addressbook_delete_contact',
+      'page arguments' => array(2),
+      'access callback' => TRUE,
+      'type' => MENU_CALLBACK,
     ),
   );
 }
 
-function addressbook_list_page() {
-  return drupal_get_form('addressbook_list_page_form');
-}
-
-
-function addressbook_list_page_form($form, &$form_state) {
-  global $user;
-
-  $form = array();
-
-  $terms = array();
-  $vocab = taxonomy_vocabulary_machine_name_load('addresbook_categories');
-  $tree  = taxonomy_get_tree($vocab->vid);
-  foreach ($tree as $term) {
-    $terms[$term->tid] = $term->name;
+/**
+ * Title callback for "address-book/edit/%" and "address-book/delete/%"
+ *  
+ * @param $form_state
+ * @param $contact_id
+ * @return string
+ */
+function addressbook_title($action, $contact_id) {
+  switch ($action) {
+    case 'edit':
+      $title = t('Edit contact #');
+      break;
+    case 'delete':
+      $title = t('Confirm you want to delete item #');
+      break;
   }
+  return $title . $contact_id;
+}
 
-  $form['category'] = array(
-    '#type' => 'select',
-    '#title' => t('Category:'),
-    '#options' => $terms,
-    '#ajax' => array(
-      // #ajax has two required keys: callback and wrapper.
-      // 'callback' is a function that will be called when this element changes.
-      'callback' => 'ajax_example_simplest_callback',
-      // 'wrapper' is the HTML id of the page element that will be replaced.
-      'wrapper' => 'replace_textfield_div',
-      // There are also several optional keys - see ajax_example_autocheckboxes
-      // below for details on 'method', 'effect' and 'speed' and
-      // ajax_example_dependent_dropdown for 'event'.
+/**
+ * Title callback for "address-book/%" 
+ *  
+ * @param $contact_id
+ * @return string
+ */
+function addressbook_single_contact_title($contact_id) {
+  $result = db_select('addressbook', 'a')
+  ->fields('a', array(
+    'first_name',
+    'last_name',
+  ))
+  ->condition('contact_id', $contact_id, '=')
+  ->execute()
+  ->fetchAll();
+  $title = $result ? $result[0]->first_name . ' ' . $result[0]->last_name : t('No contact was found');
+  return $title;
+}
+
+
+/**
+ * Page callback for "address-book/delete/%"
+ *  
+ * @return array
+ */
+
+function addressbook_delete_contact($contact_id) {
+  return drupal_get_form('addressbook_delete_contact_form', $contact_id);
+}
+
+/**
+ * Form callback for "address-book/delete/%".
+ *
+ * @param $form
+ * @param $form_state
+ * @param $contact_id
+ * @return array
+ */
+function addressbook_delete_contact_form($form, &$form_state, $contact_id) {
+  $form['delete_contact'] = array(
+    '#type' => 'submit',
+    '#value' => t('Delete'),
+    '#id' => 'delete-contact',
+  );
+  $form['cancel'] = array(
+    '#type' => 'submit',
+    '#value' => t('Cancel'),
+    '#id' => 'cancel',
+  );
+  $form['contact_id'] = array(
+    '#type' => 'hidden',
+    '#value' => $contact_id,
+  );
+  return $form;
+}
+
+/**
+ * Submit callback.
+ * 
+ * @param $form
+ * @param $form_state
+ */
+function addressbook_delete_contact_form_submit($form, &$form_state) {
+  if ($form_state['clicked_button']['#id'] == 'delete-contact') {
+    $contact_id = $form_state['values']['contact_id'];
+    $query = db_delete('addressbook')
+      ->condition('contact_id', $contact_id, '=')
+      ->execute();
+  }
+  $form_state['redirect'] = 'address-book';
+}
+
+/**
+ * Page callback for "address-book/%".
+ * A single contact page.  
+ *
+ * @param $contact_id
+ * @return array
+ */
+function addressbook_single_contact($contact_id) {
+  /* This page is using its own template */
+  $output = array(
+    '#theme' => 'single_contact',
+    '#attached' => array(
+      'css' => array(
+        drupal_get_path('module', 'addressbook') . '/css/addressbook-single.css'
+      )
     ),
   );
-
-  $header = array(
-    // array('data' => t('Photo'),     'field' => 'photo'),
-    // array('data' => t('Full Name'), 'field' => 'full_name'),
-    // array('data' => t('Category'),  'field' => 'category', 'sort' => 'ASC'),
-    // array('data' => t('Email'),     'field' => 'email'),
-    // array('data' => t('Phone'),     'field' => 'phone'),
-    // array('data' => t('Birthday'),  'field' => 'birthday'),
-    // array('data' => t(''),          'field' => 'action'),
-    'photo' => t('Photo'),
-    'full_name' => t('Full Name'),
-    // 'category' => t('Category'),
-    'category' => array('data' => t('Category'),  'field' => 'category'),
-    'email' => t('Email'),
-    'phone' => t('Phone'),
-    'birthday' => t('Birthday'),
-    'action' => t('Edit | Delete'),
-  );
-
-  $options = array();
-
+  /* Get contact info */
   $result = db_select('addressbook', 'a')
   ->fields('a', array(
     'contact_id',
@@ -112,84 +205,261 @@ function addressbook_list_page_form($form, &$form_state) {
     'notes',
     'photo',
   ))
-  ->condition('user_id', $user->uid, '=')
-  ->extend('TableSort')
-  ->orderByHeader($header)
-  ->extend('PagerDefault')
-  ->limit(10)
+  ->condition('contact_id', $contact_id, '=')
   ->execute()
   ->fetchAll();
 
   if ($result) {
-    foreach ($result as $row) {
-      if ($row->photo) {
-        $photo = file_load($row->photo);
-        $photo = '<img src="' . image_style_url('contact_preview', $photo->uri) . '">';
-      }
-      else {
-        $photo = t('No photo');
-      }
+    $output['#contact_exist'] = TRUE;
+    $output['#first_name'] = $result[0]->first_name;
+    $output['#last_name']  = $result[0]->last_name;
+    $output['#email'] = l( $result[0]->email, 'mailto:' . $result[0]->email );
+    $output['#phone'] = $result[0]->phone;
+    $output['#birthday'] = $result[0]->birthday;
+    $output['#category'] = $result[0]->category;
+    $output['#notes'] = $result[0]->notes;
+    /* Create url for image */
+    if ( $fid = $result[0]->photo ) {
+      $output['#photo'] = file_create_url( file_load($fid)->uri );
+    }
+  }
+  return $output;
+}
 
-      $edit = '<a href="?q=address-book/edit/' . $row->contact_id . '">edit</a>';
+/**
+ * Page callback for "address-book".
+ *
+ * @return array
+ */
+function addressbook_list_page() {
+  /* Set breadcrumbs */
+  $breadcrumbs[] = l(t('Home'), NULL);
+  $breadcrumbs[] = l(t('Address book'), 'address-book');
+  drupal_set_breadcrumb($breadcrumbs);
+  return drupal_get_form('addressbook_list_page_form');
+}
 
-      $options[$row->contact_id] = array(
-        'photo' => $photo,
-        'full_name' => $row->first_name . ' ' . $row->last_name,
-        'category' => $row->category,
-        'email' => $row->email,
-        'phone' => $row->phone,
-        'birthday' => $row->birthday,
-        'action' => $edit . ' | delete',
-      );
-    } /* close foreach */
-  } /* clos if result */
+/** 
+ * address-book" form callback.
+ *
+ * @param $form
+ * @param $form_state
+ * @return array
+ */
 
+function addressbook_list_page_form($form, &$form_state) {
+  global $user;
+  /* Save the current path, it will be used in 
+   * the confirm_form function */
+  $path = current_path();
 
-  $form['table'] = array(
-    '#type' => 'tableselect',
-    '#header' => $header,
-    '#options' => $options,
-    '#empty' => t('No contacts found'),
-  );
+  $form  = array();
+  if (!isset($form_state['storage']['confirm'])) {
+    $terms = array();
+    $vocab = taxonomy_vocabulary_machine_name_load('addresbook_categories');
+    $tree  = taxonomy_get_tree($vocab->vid);
+    foreach ($tree as $term) {
+      $terms[$term->tid] = $term->name;
+    }
 
-  $form['submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Delete selected'),
-  );
+    $form['category'] = array(
+      '#type' => 'select',
+      '#title' => t('Category:'),
+      '#options' => $terms,
+    );
 
-  $form['pager'] = array(
-    '#markup' => theme('pager')
-  );
+    $form['apply'] = array(
+      '#type' => 'submit',
+      '#value' => t('Apply'),
+      '#id' => 'apply-category',
+    );
 
-  return $form;
+    /* Set table header */
+    $header = array(
+      'photo' => t('Photo'),
+      'full_name' => t('Full Name'),
+      'category' => array('data' => t('Category'),  'field' => 'category'),
+      'email' => t('Email'),
+      'phone' => t('Phone'),
+      'birthday' => t('Birthday'),
+      'action' => t('Edit | Delete'),
+    );
+    /* Set table rows */
+    $options = array();
+
+    /* Get contacts data */
+    $result = db_select('addressbook', 'a')
+    ->fields('a', array(
+      'contact_id',
+      'first_name',
+      'last_name',
+      'email',
+      'phone',
+      'birthday',
+      'category',
+      'notes',
+      'photo',
+    ))
+    ->condition('user_id', $user->uid, '=')
+    ->extend('TableSort')
+    ->orderByHeader($header)
+    ->extend('PagerDefault')
+    ->limit(10)
+    ->execute()
+    ->fetchAll();
+
+    /* Fill table rows with contacts data */
+    if ($result) {
+      foreach ($result as $row) {
+        if ($row->photo) {
+          $photo = file_load($row->photo);
+          $photo = '<img src="' . image_style_url('contact_preview', $photo->uri) . '">';
+        }
+        else {
+          $photo = t('No photo');
+        }
+
+        $name = l($row->first_name . ' ' . $row->last_name, 'address-book/' . $row->contact_id);
+        $edit = l('edit', 'address-book/edit/' . $row->contact_id);
+        $delete = l('delete', 'address-book/delete/' . $row->contact_id);
+
+        $options[$row->contact_id] = array(
+          'photo' => $photo,
+          'full_name' => $name,
+          'category' => $row->category,
+          'email' => $row->email,
+          'phone' => $row->phone,
+          'birthday' => $row->birthday,
+          'action' => $edit . ' | ' . $delete,
+        );
+      } /* close foreach */
+    } /* clos if result */
+
+    $form['table'] = array(
+      '#type' => 'tableselect',
+      '#header' => $header,
+      '#options' => $options,
+      '#empty' => t('No contacts found'),
+    );
+
+    $form['delete'] = array(
+      '#type' => 'submit',
+      '#value' => t('Delete selected'),
+      '#id' => 'delete-selected',
+    );
+
+    $form['pager'] = array(
+      '#markup' => theme('pager')
+    );
+
+    return $form;
+
+  }
+  else {
+    return confirm_form(
+      array(),
+      t('Confirm you want to delete this items'),
+      $path,
+      t('Do you really want to delete these contacts?<br>This action cannot be undone'),
+      t('Delete'),
+      t('Cancel')
+    );
+  }
+
 
 }
 
+/**
+ * Submit callback for the addressbook_list_page_form
+ * 
+ * @param $form
+ * @param $form_state
+ */
 function addressbook_list_page_form_submit($form, &$form_state) {
-  dsm( $form_state );
+  /* Get all checkboxes values. */
+  $checkboxes = isset($form_state['storage']['original_form']) ?
+    $form_state['storage']['original_form']['table'] :
+    $form_state['values']['table'];
+
+  /* Leave only checked checkboxes. They store 
+   * the IDs of the items we want to perform actions. */
+  $checked = array();
+  foreach ($checkboxes as $checkbox) {
+    $checkbox && $checked[] = $checkbox;
+  }
+
+  /* Do actions with checked items */
+  if (!empty($checked)) {
+    switch ($form_state['clicked_button']['#id']) {
+      case 'apply-category':
+        /* User clicked apply button, he wants to change category. */
+        $term = taxonomy_term_load($form_state['values']['category']);
+        $category = $term->name;
+        $query = db_update('addressbook')
+          ->fields(array('category' => $category))
+          ->condition('contact_id', $checked, 'IN')
+          ->execute();
+        break;
+      case 'delete-selected':
+        /* User clicked delete button, he wants to delete itemes.
+         * Show him the confirm message and save current form values 
+         * to the storage, so we can use it after the confirmation. */
+        $form_state['storage']['confirm'] = TRUE;
+        $form_state['storage']['original_form'] = $form_state['values'];
+        $form_state['rebuild'] = TRUE;
+        break;
+      case 'edit-submit':
+        /* User confirmed that he wants the contacts to be deleted,
+         * remove them from the database */
+        $query = db_delete('addressbook')
+          ->condition('contact_id', $checked, 'IN')
+          ->execute();
+        break;
+    } /*close switch */
+  } /* close if */
 }
-
-
-
-
-
 
 /**
  * Page callback for menu route "addressbook/add".
  * 
- * @param string $arg
+ * @param $arg
  * @return string
  */
-
 function addressbook_add_page($arg = "") {
+  /* Set breadcrumbs */
+  $current = $arg ? 'Edit' : 'Add';
+  $breadcrumbs[] = l(t('Home'), NULL);
+  $breadcrumbs[] = l(t('Address book'), 'address-book');
+  $breadcrumbs[] = l(t($current . ' contact'), 'add');
+  drupal_set_breadcrumb($breadcrumbs);
+
+  if ($arg) {
+    $result = db_select('addressbook', 'a')
+    ->fields('a', array(
+      'first_name',
+    ))
+    ->condition('contact_id', $arg, '=')
+    ->execute()
+    ->fetchAll();
+    if (!$result) {
+      return t('This contact doesn\'t exist.');
+    }
+  }
   return drupal_get_form('addressbook_add_page_form', $arg);
 }
 
+
+/**
+ * Form callback for "addressbook".
+ * 
+ * @param $form
+ * @param $form_state
+ * @param $arg
+ */
 function addressbook_add_page_form($form, &$form_state, $arg = "") {
-  global $user;  
-  $upload_location = 'public://addressbook/' . $user->uid . '/';
-  // $upload_location = 'public://addressbook/_tmp/';
-  file_prepare_directory($upload_location, FILE_CREATE_DIRECTORY);
+  global $user; 
+
+  $form = array();
 
   $defaults = array(
     'first_name' => '',
@@ -201,7 +471,16 @@ function addressbook_add_page_form($form, &$form_state, $arg = "") {
     'notes' => '',
     'photo' => '',
   );
+  
+  /* Create folder to store images */
+  $upload_location = 'public://addressbook/' . $user->uid . '/';
+  file_prepare_directory($upload_location, FILE_CREATE_DIRECTORY);
 
+  /* If this is an edit page we need to get
+   * stored field values from the database,
+   * and set them as default values for the
+   * form fields.
+   */
   if ($arg) {
       $result = db_select('addressbook', 'a')
     ->fields('a', array(
@@ -224,10 +503,7 @@ function addressbook_add_page_form($form, &$form_state, $arg = "") {
         $defaults[$key] = $value;
       }
     }
-
   }
-
-  $form = array();
 
   $form['photo'] = array(
     '#type' => 'managed_file',
@@ -276,6 +552,7 @@ function addressbook_add_page_form($form, &$form_state, $arg = "") {
     ),
   );
 
+  /* Get category options from the custom vocabulary */
   $terms = array();
   $vocab = taxonomy_vocabulary_machine_name_load('addresbook_categories');
   $tree  = taxonomy_get_tree($vocab->vid);
@@ -305,27 +582,29 @@ function addressbook_add_page_form($form, &$form_state, $arg = "") {
 }
 
 
-
+/**
+ * "addressbook" validate callback.
+ * 
+ * @param $form
+ * @param $form_state
+ */
 function addressbook_add_page_form_validate($form, &$form_state) {
   global $user;
-  
-
+  /* Contact must have at least first name or last name */
   if ( !$form_state['values']['first_name'] && !$form_state['values']['last_name'] ) {
     form_set_error('first_name', t('Please enter at least first name or last name of your contact.'));
     form_set_error('last_name', '');
   }
-
 }
 
-
-
+/**
+ * "addressbook" submit callback.
+ * 
+ * @param $form
+ * @param $form_state
+ */
 function addressbook_add_page_form_submit($form, &$form_state) {
-
-  dsm( $form_state );
-
-
   global $user;
-  global $account;
   /* Change file status and move it to a new folder */
   if ( $form_state['values']['photo'] ) {
     $fid = $form_state['values']['photo'];
@@ -336,11 +615,11 @@ function addressbook_add_page_form_submit($form, &$form_state) {
     file_usage_add($file, 'addressbook', 'user', 1); 
     $form_state['values']['photo'] = $file->fid;
   }
-
   /* Make birthday value match MySql date format Y-m-d */
   $birthday = $form_state['values']['birthday'];
   $birthday = $birthday['year'] . '-' . $birthday['month'] . '-' . $birthday['day'];
-
+  /* Get categories */
+  $category = taxonomy_term_load($form_state['values']['category'])->name;
   /* Save data to database */
   if ($form_state['build_info']['args'][0]) {
     $arg = $form_state['build_info']['args'][0];
@@ -351,7 +630,7 @@ function addressbook_add_page_form_submit($form, &$form_state) {
           'email' => $form_state['values']['email'],
           'phone' => $form_state['values']['phone'],
           'birthday' => $birthday,
-          'category' => $form_state['values']['category'],
+          'category' => $category,
           'notes' => $form_state['values']['notes'],
           'photo' => $form_state['values']['photo'],
         ))
@@ -365,7 +644,7 @@ function addressbook_add_page_form_submit($form, &$form_state) {
           'email' => $form_state['values']['email'],
           'phone' => $form_state['values']['phone'],
           'birthday' => $birthday,
-          'category' => $form_state['values']['category'],
+          'category' => $category,
           'notes' => $form_state['values']['notes'],
           'photo' => $form_state['values']['photo'],
           'user_id' => $user->uid,

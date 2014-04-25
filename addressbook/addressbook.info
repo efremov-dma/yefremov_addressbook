@@ -1,3 +1,3 @@
 name = "Address Book"
-description = "Allows user to create address book"
+description = "Allows user to create contacts"
 core = 7.x

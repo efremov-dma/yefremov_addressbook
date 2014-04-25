@@ -1,5 +1,4 @@
 <?php
-
 function theme_upload_thumb($variables) {
   $element = $variables['element'];
   if (isset($element['#file']->uri)) {
@@ -13,4 +12,3 @@ function theme_upload_thumb($variables) {
     return $output;
   }
 }
-
